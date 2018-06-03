@@ -3,6 +3,7 @@ package org.eclipsecon.demo.parallelbuilds;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -14,11 +15,27 @@ public class GenerateDependencyGraph {
 	public static File getPngGraphDependency() {
 		StringBuilder dotGraph = new StringBuilder();
 		dotGraph.append("digraph dependencyGraph {\n");
+		dotGraph.append("rankdir=RL;");
 		IProject[] allProjects = ResourcesPlugin.getWorkspace().getRoot().getProjects();
 		for (IProject project : allProjects) {
 			String colorString = "\"#" + String.format("%06X",LogBuildsListener.colorForProject(project).getRGB() & 0xffffff) + "\"";
 			dotGraph.append(project.getName() + "[color=" + colorString + " penwidth=3];\n");
 		}
+		dotGraph.append("{rank = same; ");
+		Arrays.stream(allProjects)
+			.filter(project -> {
+				try {
+					return project.getReferencedProjects().length == 0;
+				} catch (CoreException e1) {
+					e1.printStackTrace();
+					return false;
+				}
+			})
+			.forEach(project -> {
+				dotGraph.append(project.getName());
+				dotGraph.append("; ");
+			});
+		dotGraph.append("}\n");
 		// dependnencies
 		for (IProject project : allProjects) {
 			try {
