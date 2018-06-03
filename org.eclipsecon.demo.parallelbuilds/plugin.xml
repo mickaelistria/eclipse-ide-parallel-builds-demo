@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         id="waitBuilder"
+         name="Wait for some time"
+         point="org.eclipse.core.resources.builders">
+      <builder
+            callOnEmptyDelta="true">
+         <run
+               class="org.eclipsecon.demo.parallelbuilds.WaitProjectBuilder">
+         </run>
+      </builder>
+   </extension>
+   <extension
+         point="org.eclipse.ui.startup">
+      <startup
+            class="org.eclipsecon.demo.parallelbuilds.ForceInitiatlize">
+      </startup>
+   </extension>
+
+</plugin>
