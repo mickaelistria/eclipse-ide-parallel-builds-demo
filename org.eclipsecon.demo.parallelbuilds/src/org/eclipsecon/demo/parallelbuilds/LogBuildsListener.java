@@ -2,6 +2,8 @@ package org.eclipsecon.demo.parallelbuilds;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
+import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -16,18 +18,23 @@ import java.util.Map;
 
 import javax.imageio.ImageIO;
 
+import org.eclipse.core.internal.resources.Workspace;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IResourceChangeListener;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.jobs.IJobChangeEvent;
+import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.core.runtime.jobs.JobChangeAdapter;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.browser.IWebBrowser;
 import org.eclipse.ui.browser.IWorkbenchBrowserSupport;
 
-public class LogBuildsListener implements IResourceChangeListener {
+public class LogBuildsListener extends JobChangeAdapter implements IResourceChangeListener {
 
 	public static final LogBuildsListener SINGLETON = new LogBuildsListener();
 
@@ -66,9 +73,9 @@ public class LogBuildsListener implements IResourceChangeListener {
 	}
 
 	private void workspaceBuildStart() {
+		File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
 		Display.getDefault().asyncExec(() -> {
 			try {
-				File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
 				IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, pngGraphDependency.getName(), pngGraphDependency.getName(), pngGraphDependency.getName());
 				browser.openURL(pngGraphDependency.toURI().toURL());
 			} catch (PartInitException | MalformedURLException e) {
@@ -79,14 +86,24 @@ public class LogBuildsListener implements IResourceChangeListener {
 		startTime = System.currentTimeMillis();
 		allProjects = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects());
 		startTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
-		bImg = new BufferedImage(PROJECT_NAME_COLUMN_WIDTH + allProjects.size() * 100 + 100, LINE_HEIGHT + allProjects.size() * LINE_HEIGHT, BufferedImage.TYPE_INT_RGB);
+		bImg = new BufferedImage(PROJECT_NAME_COLUMN_WIDTH + allProjects.size() * 100 + 100, yForProject(allProjects.get(allProjects.size() - 1)) + LINE_HEIGHT, ColorSpace.TYPE_RGB);
 		cg = bImg.createGraphics();
 		cg.setBackground(Color.WHITE);
 		cg.setColor(Color.BLACK);
 		cg.clearRect(0, 0, bImg.getWidth(), bImg.getHeight());
 		// draw legend
-		cg.drawLine(5, 15, 105, 15);
-		cg.drawString("100px = " + 100/RATIO + "ms", 110, 15);
+		int y = 15;
+		cg.drawOval(5, y, LINE_HEIGHT / 2, LINE_HEIGHT / 2);
+		cg.drawString("Job scheduled", 5 + LINE_HEIGHT/2 + 5, y + LINE_HEIGHT / 2);
+		y += LINE_HEIGHT;
+		cg.drawPolygon(createLosange(10, y));
+		cg.drawString("Job start", 5 + LINE_HEIGHT/2 + 5, y + LINE_HEIGHT / 2);
+		y += LINE_HEIGHT;
+		cg.fillRect(5, y, LINE_HEIGHT, LINE_HEIGHT / 2);
+		cg.drawString("Build running", 5 + LINE_HEIGHT + 5, y + LINE_HEIGHT / 2);
+		y += LINE_HEIGHT;
+		cg.drawLine(5, y, 105, y);
+		cg.drawString("100px = " + 100/RATIO + "ms", 110, y);
 		// project name colum
 		allProjects.forEach(p -> {
 			cg.setColor(colorForProject(p));
@@ -118,12 +135,17 @@ public class LogBuildsListener implements IResourceChangeListener {
 	}
 
 	public void postBuild(IProject project) {
-		cg.setColor(colorForProject(project));
-		cg.fillRect(xForTime(startTimes.get(project)), yForProject(project), xForTime(System.currentTimeMillis()) - xForTime(startTimes.get(project)), LINE_HEIGHT / 2);
+		Color colorForProject = colorForProject(project);
+		int projectStartX = xForTime(startTimes.get(project));
+		int projectDX = xForTime(System.currentTimeMillis()) - projectStartX;
+		synchronized (cg) {
+			cg.setColor(colorForProject);
+			cg.fillRect(projectStartX, yForProject(project), projectDX, LINE_HEIGHT / 2);
+		}
 	}
 
 	private int yForProject(IProject p) {
-		return LINE_HEIGHT + allProjects.indexOf(p) * LINE_HEIGHT;
+		return 5 * LINE_HEIGHT + allProjects.indexOf(p) * LINE_HEIGHT;
 	}
 
 	private int xForTime(long timestamp) {
@@ -134,5 +156,60 @@ public class LogBuildsListener implements IResourceChangeListener {
 	public static Color colorForProject(IProject p) {
 		int index = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects()).indexOf(p);
 		return COLORS[index];
+	}
+
+	@Override public void scheduled(IJobChangeEvent event) {
+		if (isProjectBuildJob(event.getJob())) {
+			IProject project = getProject(event);
+			int x = xForTime(System.currentTimeMillis());
+			int y = yForProject(project);
+			Color colorForProject = colorForProject(project);
+			synchronized (cg) {
+				cg.setColor(colorForProject);
+				cg.drawOval(x - LINE_HEIGHT / 4, y , LINE_HEIGHT / 2, LINE_HEIGHT / 2);
+			}
+		}
+	}
+
+	@Override public void aboutToRun(IJobChangeEvent event) {
+		if (isProjectBuildJob(event.getJob())) {
+			IProject project = getProject(event);
+			int x = xForTime(System.currentTimeMillis());
+			int y = yForProject(project);
+			Color colorForProject = colorForProject(project);
+			Polygon polygon = createLosange(x, y);
+			synchronized (cg) {
+				cg.setColor(colorForProject);
+				cg.drawPolygon(polygon);
+			}
+		}
+	}
+
+	protected Polygon createLosange(int centerX, int topY) {
+		Polygon polygon = new Polygon();
+		polygon.addPoint(centerX - LINE_HEIGHT / 4, topY + LINE_HEIGHT / 4);
+		polygon.addPoint(centerX, topY);
+		polygon.addPoint(centerX + LINE_HEIGHT / 4, topY + LINE_HEIGHT / 4);
+		polygon.addPoint(centerX, topY + LINE_HEIGHT / 2);
+		return polygon;
+	}
+
+	protected IProject getProject(IJobChangeEvent event) {
+		IProject project = null;
+		String buildConfigToString = event.getJob().getName();
+		for (IProject p : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
+			try {
+				if (p.getActiveBuildConfig().toString().equals(buildConfigToString)) {
+					project = p;
+				}
+			} catch (CoreException e) {
+				e.printStackTrace();
+			}
+		}
+		return project;
+	}
+
+	private boolean isProjectBuildJob(Job job) {
+		return job.getJobGroup() != null && job.getJobGroup().getName().equals(Workspace.class.getName().toString());
 	}
 }
