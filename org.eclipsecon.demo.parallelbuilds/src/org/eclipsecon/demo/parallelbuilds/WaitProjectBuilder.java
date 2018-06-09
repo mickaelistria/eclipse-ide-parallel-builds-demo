@@ -33,10 +33,7 @@ public class WaitProjectBuilder extends IncrementalProjectBuilder {
 	}
 
 	@Override public ISchedulingRule getRule(int kind, Map<String, String> args) {
-		return getSchedulingRule(getProject());
-	}
-
-	public static ISchedulingRule getSchedulingRule(IProject project) {
+		IProject project = getProject();
 		Properties p = getProperties(project);
 		String rule = p.getProperty("schedulingRule");
 		if (rule == null) {

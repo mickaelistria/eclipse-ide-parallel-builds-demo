@@ -3,9 +3,14 @@ package org.eclipsecon.demo.parallelbuilds;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-import org.eclipse.core.internal.events.BuildCommand;
+import org.eclipse.core.internal.events.BuildManager;
+import org.eclipse.core.internal.resources.Workspace;
 import org.eclipse.core.resources.ICommand;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
@@ -22,7 +27,7 @@ public class GenerateDependencyGraph {
 		IProject[] allProjects = ResourcesPlugin.getWorkspace().getRoot().getProjects();
 		for (IProject project : allProjects) {
 			String colorString = "\"#" + String.format("%06X",LogBuildsListener.colorForProject(project).getRGB() & 0xffffff) + "\"";
-			dotGraph.append(project.getName() + "[color=" + colorString + " penwidth=3];\n");
+			dotGraph.append('"' + project.getName() + "\" [color=" + colorString + " penwidth=3];\n");
 		}
 		dotGraph.append("{rank = same; ");
 		Arrays.stream(allProjects)
@@ -35,7 +40,7 @@ public class GenerateDependencyGraph {
 				}
 			})
 			.forEach(project -> {
-				dotGraph.append(project.getName());
+				dotGraph.append('"' + project.getName() + '"');
 				dotGraph.append("; ");
 			});
 		dotGraph.append("}\n");
@@ -50,27 +55,37 @@ public class GenerateDependencyGraph {
 			}
 		}
 		// conflicting scheduling rule
-		for (int i = 0; i < allProjects.length; i++) {
-			IProject project = allProjects[i];
-			WaitProjectBuilder waitProjectBuilder = null;
+		Map<IProject, ISchedulingRule> rulesForProject = new LinkedHashMap<>(allProjects.length);
+		BuildManager manager = null;
+		try {
+			Field field = Workspace.class.getDeclaredField("buildManager");
+			field.setAccessible(true);
+			manager = (BuildManager) field.get(ResourcesPlugin.getWorkspace());
+		} catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e1) {
+			e1.printStackTrace();
+			return null;
+		}
+		for (IProject project : allProjects) {
 			try {
 				for (ICommand command : project.getDescription().getBuildSpec()) {
-					if (command instanceof BuildCommand) {
-						IncrementalProjectBuilder builder = ((BuildCommand)command).getBuilder(project.getActiveBuildConfig());
-						if (builder instanceof WaitProjectBuilder) {
-							waitProjectBuilder = (WaitProjectBuilder) builder;
-						}
-					}
+					rulesForProject.put(project,
+							manager.getRule(project.getActiveBuildConfig(), IncrementalProjectBuilder.FULL_BUILD, command.getBuilderName(), Collections.emptyMap()));
 				}
 			} catch (CoreException e) {
 				e.printStackTrace();
 			}
-			if (waitProjectBuilder != null) {
-				ISchedulingRule rule = WaitProjectBuilder.getSchedulingRule(project);
+		}
+		for (int i = 0; i < allProjects.length; i++) {
+			IProject project = allProjects[i];
+			ISchedulingRule rule = rulesForProject.get(project);
+			if (rule != null) {
 				for (int j = i + 1; j < allProjects.length; j++) {
-					IProject other = allProjects[j];;
-					if (rule.isConflicting(WaitProjectBuilder.getSchedulingRule(other))) {
-						dotGraph.append(project.getName() + " -> " + other.getName() + "[dir=none color=red style=dashed];\n");
+					IProject other = allProjects[j];
+					ISchedulingRule otherRule = rulesForProject.get(other);
+					if (otherRule != null) {
+						if (rule.isConflicting(otherRule)) {
+							dotGraph.append(project.getName() + " -> " + other.getName() + "[dir=none color=red style=dashed];\n");
+						}
 					}
 				}
 			}
