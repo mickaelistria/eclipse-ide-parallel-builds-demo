@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.imageio.ImageIO;
 
@@ -55,8 +56,12 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	private BufferedImage bImg;
 	private Graphics2D cg;
 	private List<IProject> allProjects;
-	private Map<IProject, Long> startTimes;
-	private long startTime;
+	private long origintTime;
+
+	private Map<IProject, Long> jobStartTimes;
+	private Map<IProject, Long> jobScheduledTimes;
+	private Map<IProject, Long> builderStartTimes;
+	private Map<IProject, Long> builderEndTimes;
 
 	private LogBuildsListener() {
 	}
@@ -83,10 +88,25 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			}
 		});
 
-		startTime = System.currentTimeMillis();
+		origintTime = System.currentTimeMillis();
 		allProjects = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects());
-		startTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
-		bImg = new BufferedImage(PROJECT_NAME_COLUMN_WIDTH + allProjects.size() * 100 + 100, yForProject(allProjects.get(allProjects.size() - 1)) + LINE_HEIGHT, ColorSpace.TYPE_RGB);
+		builderStartTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
+		builderEndTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
+		jobStartTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
+		jobScheduledTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
+	}
+
+	public void preBuild(IProject project) {
+		builderStartTimes.put(project, System.currentTimeMillis());
+	}
+
+	public void postBuild(IProject project) {
+		builderEndTimes.put(project, System.currentTimeMillis());
+	}
+
+	private void createImageAndDrawCaption() {
+		int width = (int) ((System.currentTimeMillis() - origintTime) * RATIO);
+		bImg = new BufferedImage(PROJECT_NAME_COLUMN_WIDTH + width + 100, yForProject(allProjects.get(allProjects.size() - 1)) + LINE_HEIGHT, ColorSpace.TYPE_RGB);
 		cg = bImg.createGraphics();
 		cg.setBackground(Color.WHITE);
 		cg.setColor(Color.BLACK);
@@ -109,10 +129,23 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			cg.setColor(colorForProject(p));
 			cg.drawString(p.getName(), 2, yForProject(p) + 15);
 		});
-
 	}
 
 	private void workspaceBuildComplete() {
+		createImageAndDrawCaption();
+		for (Entry<IProject, Long> entry : builderStartTimes.entrySet()) {
+			Color colorForProject = colorForProject(entry.getKey());
+			int projectStartX = xForTime(builderStartTimes.get(entry.getKey()));
+			int projectDX = xForTime(builderEndTimes.get(entry.getKey())) - projectStartX;
+			cg.setColor(colorForProject);
+			cg.fillRect(projectStartX, yForProject(entry.getKey()), projectDX, LINE_HEIGHT / 2);
+		}
+		for (Entry<IProject, Long> entry : jobStartTimes.entrySet()) {
+			drawBuildJobStart(entry.getKey(), entry.getValue());
+		}
+		for (Entry<IProject, Long> entry : jobScheduledTimes.entrySet()) {
+			drawScheduled(entry.getKey(), entry.getValue());
+		}
 		File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), System.currentTimeMillis() + ".png");
 		try (OutputStream output = new FileOutputStream(targetFile)) {
 			ImageIO.write(bImg, "png", output);
@@ -130,26 +163,12 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		}
 	}
 
-	public void preBuild(IProject project) {
-		startTimes.put(project, System.currentTimeMillis());
-	}
-
-	public void postBuild(IProject project) {
-		Color colorForProject = colorForProject(project);
-		int projectStartX = xForTime(startTimes.get(project));
-		int projectDX = xForTime(System.currentTimeMillis()) - projectStartX;
-		synchronized (cg) {
-			cg.setColor(colorForProject);
-			cg.fillRect(projectStartX, yForProject(project), projectDX, LINE_HEIGHT / 2);
-		}
-	}
-
 	private int yForProject(IProject p) {
 		return 5 * LINE_HEIGHT + allProjects.indexOf(p) * LINE_HEIGHT;
 	}
 
 	private int xForTime(long timestamp) {
-		long deltaToOrigin = timestamp - startTime;
+		long deltaToOrigin = timestamp - origintTime;
 		return (int) (PROJECT_NAME_COLUMN_WIDTH + deltaToOrigin * RATIO);
 	}
 
@@ -160,29 +179,33 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 
 	@Override public void scheduled(IJobChangeEvent event) {
 		if (isProjectBuildJob(event.getJob())) {
-			IProject project = getProject(event);
-			int x = xForTime(System.currentTimeMillis());
-			int y = yForProject(project);
-			Color colorForProject = colorForProject(project);
-			synchronized (cg) {
-				cg.setColor(colorForProject);
-				cg.drawOval(x - LINE_HEIGHT / 4, y , LINE_HEIGHT / 2, LINE_HEIGHT / 2);
-			}
+			jobScheduledTimes.put(getProject(event), System.currentTimeMillis());
+		}
+	}
+
+	private void drawScheduled(IProject project, long scheduledTime) {
+		int x = xForTime(scheduledTime);
+		int y = yForProject(project);
+		Color colorForProject = colorForProject(project);
+		synchronized (cg) {
+			cg.setColor(colorForProject);
+			cg.drawOval(x - LINE_HEIGHT / 4, y , LINE_HEIGHT / 2, LINE_HEIGHT / 2);
 		}
 	}
 
 	@Override public void aboutToRun(IJobChangeEvent event) {
 		if (isProjectBuildJob(event.getJob())) {
-			IProject project = getProject(event);
-			int x = xForTime(System.currentTimeMillis());
-			int y = yForProject(project);
-			Color colorForProject = colorForProject(project);
-			Polygon polygon = createLosange(x, y);
-			synchronized (cg) {
-				cg.setColor(colorForProject);
-				cg.drawPolygon(polygon);
-			}
+			jobStartTimes.put(getProject(event), System.currentTimeMillis());
 		}
+	}
+
+	protected void drawBuildJobStart(IProject project, long jobStartTime) {
+		int x = xForTime(jobStartTime);
+		int y = yForProject(project);
+		Color colorForProject = colorForProject(project);
+		Polygon polygon = createLosange(x, y);
+		cg.setColor(colorForProject);
+		cg.drawPolygon(polygon);
 	}
 
 	protected Polygon createLosange(int centerX, int topY) {
