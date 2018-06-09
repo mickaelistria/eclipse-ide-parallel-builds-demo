@@ -67,7 +67,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	@Override public void resourceChanged(IResourceChangeEvent event) {
-		if (event.getBuildKind() == IncrementalProjectBuilder.AUTO_BUILD) {
+		if (event.getBuildKind() == IncrementalProjectBuilder.CLEAN_BUILD || event.getBuildKind() == IncrementalProjectBuilder.AUTO_BUILD) {
 			return;
 		}
 		if (event.getType() == IResourceChangeEvent.PRE_BUILD) {

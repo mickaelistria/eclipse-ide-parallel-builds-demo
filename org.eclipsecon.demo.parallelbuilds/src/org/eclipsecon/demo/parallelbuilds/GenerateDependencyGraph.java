@@ -5,7 +5,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.eclipse.core.internal.events.BuildCommand;
+import org.eclipse.core.resources.ICommand;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.jobs.ISchedulingRule;
@@ -49,11 +52,26 @@ public class GenerateDependencyGraph {
 		// conflicting scheduling rule
 		for (int i = 0; i < allProjects.length; i++) {
 			IProject project = allProjects[i];
-			ISchedulingRule rule = WaitProjectBuilder.getSchedulingRule(project);
-			for (int j = i + 1; j < allProjects.length; j++) {
-				IProject other = allProjects[j];;
-				if (rule.isConflicting(WaitProjectBuilder.getSchedulingRule(other))) {
-					dotGraph.append(project.getName() + " -> " + other.getName() + "[dir=none color=red style=dashed];\n");
+			WaitProjectBuilder waitProjectBuilder = null;
+			try {
+				for (ICommand command : project.getDescription().getBuildSpec()) {
+					if (command instanceof BuildCommand) {
+						IncrementalProjectBuilder builder = ((BuildCommand)command).getBuilder(project.getActiveBuildConfig());
+						if (builder instanceof WaitProjectBuilder) {
+							waitProjectBuilder = (WaitProjectBuilder) builder;
+						}
+					}
+				}
+			} catch (CoreException e) {
+				e.printStackTrace();
+			}
+			if (waitProjectBuilder != null) {
+				ISchedulingRule rule = WaitProjectBuilder.getSchedulingRule(project);
+				for (int j = i + 1; j < allProjects.length; j++) {
+					IProject other = allProjects[j];;
+					if (rule.isConflicting(WaitProjectBuilder.getSchedulingRule(other))) {
+						dotGraph.append(project.getName() + " -> " + other.getName() + "[dir=none color=red style=dashed];\n");
+					}
 				}
 			}
 		}
