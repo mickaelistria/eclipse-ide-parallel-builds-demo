@@ -56,7 +56,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	private BufferedImage bImg;
 	private Graphics2D cg;
 	private List<IProject> allProjects;
-	private long origintTime;
+	private long originTime;
 
 	private Map<IProject, Long> jobStartTimes;
 	private Map<IProject, Long> jobScheduledTimes;
@@ -88,7 +88,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			}
 		});
 
-		origintTime = System.currentTimeMillis();
+		originTime = System.currentTimeMillis();
 		allProjects = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects());
 		builderStartTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
 		builderEndTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
@@ -105,14 +105,18 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private void createImageAndDrawCaption() {
-		int width = (int) ((System.currentTimeMillis() - origintTime) * RATIO);
+		long finalTime = System.currentTimeMillis();
+		int width = (int) ((finalTime - originTime) * RATIO);
 		bImg = new BufferedImage(PROJECT_NAME_COLUMN_WIDTH + width + 100, yForProject(allProjects.get(allProjects.size() - 1)) + LINE_HEIGHT, ColorSpace.TYPE_RGB);
 		cg = bImg.createGraphics();
 		cg.setBackground(Color.WHITE);
 		cg.setColor(Color.BLACK);
 		cg.clearRect(0, 0, bImg.getWidth(), bImg.getHeight());
-		// draw legend
 		int y = 15;
+		// total duration
+		cg.drawString("total duration=" + (finalTime - originTime)/1000 + "s", 5, y);
+		y += LINE_HEIGHT;
+		// draw legend
 		cg.drawOval(5, y, LINE_HEIGHT / 2, LINE_HEIGHT / 2);
 		cg.drawString("Job scheduled", 5 + LINE_HEIGHT/2 + 5, y + LINE_HEIGHT / 2);
 		y += LINE_HEIGHT;
@@ -164,17 +168,17 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private int yForProject(IProject p) {
-		return 5 * LINE_HEIGHT + allProjects.indexOf(p) * LINE_HEIGHT;
+		return 6 * LINE_HEIGHT + allProjects.indexOf(p) * LINE_HEIGHT;
 	}
 
 	private int xForTime(long timestamp) {
-		long deltaToOrigin = timestamp - origintTime;
+		long deltaToOrigin = timestamp - originTime;
 		return (int) (PROJECT_NAME_COLUMN_WIDTH + deltaToOrigin * RATIO);
 	}
 
 	public static Color colorForProject(IProject p) {
 		int index = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects()).indexOf(p);
-		return COLORS[index];
+		return COLORS[index % COLORS.length];
 	}
 
 	@Override public void scheduled(IJobChangeEvent event) {
@@ -222,7 +226,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		String buildConfigToString = event.getJob().getName();
 		for (IProject p : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			try {
-				if (p.getActiveBuildConfig().toString().equals(buildConfigToString)) {
+				if (p.isAccessible() && p.getActiveBuildConfig().toString().equals(buildConfigToString)) {
 					project = p;
 				}
 			} catch (CoreException e) {

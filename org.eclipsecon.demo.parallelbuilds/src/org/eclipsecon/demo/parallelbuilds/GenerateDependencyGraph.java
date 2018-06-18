@@ -48,7 +48,7 @@ public class GenerateDependencyGraph {
 		for (IProject project : allProjects) {
 			try {
 				for (IProject referencedProject : project.getReferencedProjects()) {
-					dotGraph.append(project.getName() + " -> " + referencedProject.getName() + ";\n");
+					dotGraph.append('"' + project.getName() + "\" -> \"" + referencedProject.getName() + "\";\n");
 				}
 			} catch (CoreException e) {
 				e.printStackTrace();
@@ -66,6 +66,9 @@ public class GenerateDependencyGraph {
 			return null;
 		}
 		for (IProject project : allProjects) {
+			if (!project.isAccessible()) {
+				continue;
+			}
 			try {
 				for (ICommand command : project.getDescription().getBuildSpec()) {
 					rulesForProject.put(project,
