@@ -8,24 +8,42 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.function.Function;
 
 import javax.imageio.ImageIO;
 
+import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.internal.resources.Workspace;
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IResourceChangeListener;
+import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.core.runtime.jobs.JobChangeAdapter;
@@ -34,6 +52,7 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.browser.IWebBrowser;
 import org.eclipse.ui.browser.IWorkbenchBrowserSupport;
+import org.eclipse.ui.ide.IDE;
 
 public class LogBuildsListener extends JobChangeAdapter implements IResourceChangeListener {
 
@@ -78,9 +97,9 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private void workspaceBuildStart() {
-		File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
 		Display.getDefault().asyncExec(() -> {
 			try {
+				File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
 				IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, pngGraphDependency.getName(), pngGraphDependency.getName(), pngGraphDependency.getName());
 				browser.openURL(pngGraphDependency.toURI().toURL());
 			} catch (PartInitException | MalformedURLException e) {
@@ -97,7 +116,9 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	public void preBuild(IProject project) {
-		builderStartTimes.put(project, System.currentTimeMillis());
+		if (builderStartTimes != null) {
+			builderStartTimes.put(project, System.currentTimeMillis());
+		}
 	}
 
 	public void postBuild(IProject project) {
@@ -150,7 +171,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		for (Entry<IProject, Long> entry : jobScheduledTimes.entrySet()) {
 			drawScheduled(entry.getKey(), entry.getValue());
 		}
-		File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), System.currentTimeMillis() + ".png");
+		File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-gantt.png");
 		try (OutputStream output = new FileOutputStream(targetFile)) {
 			ImageIO.write(bImg, "png", output);
 			cg.dispose();
@@ -163,6 +184,28 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 				}
 			});
 		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		SortedMap<IPath, byte[]> map = this.contentHashDigest.apply(ResourcesPlugin.getWorkspace());
+		File hashOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-hash.txt");
+		try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
+			for (Entry<IPath, byte[]> hash : map.entrySet()) {
+				outputStream.write(hash.getKey().toString().getBytes());
+				outputStream.write(' ');
+				for (byte b : hash.getValue()) {
+					outputStream.write(String.format("%02x",b).getBytes());
+				}
+				outputStream.write('\n');
+			}
+			Display.getDefault().asyncExec(() -> {
+				try {
+					IDE.openEditorOnFileStore(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), EFS.getStore(hashOutput.toURI()));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
@@ -239,4 +282,58 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	private boolean isProjectBuildJob(Job job) {
 		return job.getJobGroup() != null && job.getJobGroup().getName().equals(Workspace.class.getName().toString());
 	}
+
+	private final static Function<IWorkspace, SortedMap<IPath, byte[]>> contentHashDigest = new Function<IWorkspace, SortedMap<IPath, byte[]>>() {
+
+		private byte[] hashCodeFileContent(IFile file) {
+			try {
+				MessageDigest md = MessageDigest.getInstance("MD5");
+				try (InputStream is = file.getContents();
+				     DigestInputStream dis = new DigestInputStream(is, md))
+				{
+					while (dis.read() >= 0) {}
+				}
+				return md.digest();
+			} catch (Exception e) {
+				e.printStackTrace();
+				return null;
+			}
+		}
+
+		@Override
+		public SortedMap<IPath, byte[]> apply(IWorkspace workspace) {
+			SortedMap<IPath, byte[]> res = Collections.synchronizedSortedMap(new TreeMap<>((path1, path2) -> path1.toString().compareTo(path2.toString())));
+			try {
+				Set<IProject> rootProjects = new HashSet<>();
+				SortedSet<IProject> projects = new TreeSet<IProject>(Comparator.comparing(p -> p.getLocation().toFile().getAbsolutePath()));
+				projects.addAll(Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects()));
+				Iterator<IProject> iterator = projects.iterator();
+				IProject current = iterator.next();
+				rootProjects.add(current);
+				while (iterator.hasNext()) {
+					IProject p = iterator.next();
+					if (!current.getLocation().isPrefixOf(p.getLocation())) {
+						current = p;
+						rootProjects.add(p);
+					}
+				}
+				rootProjects.forEach(rootProject -> {
+					try {
+						rootProject.refreshLocal(IResource.DEPTH_INFINITE, new NullProgressMonitor());
+						rootProject.accept(resource -> {
+							if (resource.getType() == IResource.FILE) {
+								res.put(resource.getFullPath(), hashCodeFileContent((IFile)resource));
+							}
+							return true;
+						});
+					} catch (CoreException e) {
+						throw new RuntimeException(e);
+					}
+				});
+				return res;
+			} catch (Exception ex) {
+				throw new RuntimeException(ex);
+			}
+		}
+	};
 }
