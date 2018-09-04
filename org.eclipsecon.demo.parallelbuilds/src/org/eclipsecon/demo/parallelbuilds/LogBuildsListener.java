@@ -28,12 +28,14 @@ import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
 import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.internal.resources.Workspace;
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IResourceChangeEvent;
@@ -97,15 +99,17 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private void workspaceBuildStart() {
-		Display.getDefault().asyncExec(() -> {
-			try {
-				File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
-				IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, pngGraphDependency.getName(), pngGraphDependency.getName(), pngGraphDependency.getName());
-				browser.openURL(pngGraphDependency.toURI().toURL());
-			} catch (PartInitException | MalformedURLException e) {
-				e.printStackTrace();
-			}
-		});
+		if (Activator.getPlugin().getPreferenceStore().getBoolean(GenerateDependencyGraph.PREF_ID)) {
+			File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
+			Display.getDefault().asyncExec(() -> {
+				try {
+					IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, pngGraphDependency.getName(), pngGraphDependency.getName(), pngGraphDependency.getName());
+					browser.openURL(pngGraphDependency.toURI().toURL());
+				} catch (PartInitException | MalformedURLException e) {
+					e.printStackTrace();
+				}
+			});
+		}
 
 		originTime = System.currentTimeMillis();
 		allProjects = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects());
@@ -157,56 +161,80 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private void workspaceBuildComplete() {
-		createImageAndDrawCaption();
-		for (Entry<IProject, Long> entry : builderStartTimes.entrySet()) {
-			Color colorForProject = colorForProject(entry.getKey());
-			int projectStartX = xForTime(builderStartTimes.get(entry.getKey()));
-			int projectDX = xForTime(builderEndTimes.get(entry.getKey())) - projectStartX;
-			cg.setColor(colorForProject);
-			cg.fillRect(projectStartX, yForProject(entry.getKey()), projectDX, LINE_HEIGHT / 2);
-		}
-		for (Entry<IProject, Long> entry : jobStartTimes.entrySet()) {
-			drawBuildJobStart(entry.getKey(), entry.getValue());
-		}
-		for (Entry<IProject, Long> entry : jobScheduledTimes.entrySet()) {
-			drawScheduled(entry.getKey(), entry.getValue());
-		}
-		File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-gantt.png");
-		try (OutputStream output = new FileOutputStream(targetFile)) {
-			ImageIO.write(bImg, "png", output);
-			cg.dispose();
-			Display.getDefault().asyncExec(() -> {
-				try {
-					IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, targetFile.getName(), targetFile.getName(), targetFile.getName());
-					browser.openURL(targetFile.toURI().toURL());
-				} catch (PartInitException | MalformedURLException e) {
-					e.printStackTrace();
-				}
-			});
-		} catch (IOException e) {
-			e.printStackTrace();
+		if (Activator.getPlugin().getPreferenceStore().getBoolean(PREF_GENERATE_GANTT)) {
+			createImageAndDrawCaption();
+			for (Entry<IProject, Long> entry : builderStartTimes.entrySet()) {
+				Color colorForProject = colorForProject(entry.getKey());
+				int projectStartX = xForTime(builderStartTimes.get(entry.getKey()));
+				int projectDX = xForTime(builderEndTimes.get(entry.getKey())) - projectStartX;
+				cg.setColor(colorForProject);
+				cg.fillRect(projectStartX, yForProject(entry.getKey()), projectDX, LINE_HEIGHT / 2);
+			}
+			for (Entry<IProject, Long> entry : jobStartTimes.entrySet()) {
+				drawBuildJobStart(entry.getKey(), entry.getValue());
+			}
+			for (Entry<IProject, Long> entry : jobScheduledTimes.entrySet()) {
+				drawScheduled(entry.getKey(), entry.getValue());
+			}
+			File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-gantt.png");
+			try (OutputStream output = new FileOutputStream(targetFile)) {
+				ImageIO.write(bImg, "png", output);
+				cg.dispose();
+				Display.getDefault().asyncExec(() -> {
+					try {
+						IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, targetFile.getName(), targetFile.getName(), targetFile.getName());
+						browser.openURL(targetFile.toURI().toURL());
+					} catch (PartInitException | MalformedURLException e) {
+						e.printStackTrace();
+					}
+				});
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 
-		SortedMap<IPath, byte[]> map = this.contentHashDigest.apply(ResourcesPlugin.getWorkspace());
-		File hashOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-hash.txt");
-		try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
-			for (Entry<IPath, byte[]> hash : map.entrySet()) {
-				outputStream.write(hash.getKey().toString().getBytes());
-				outputStream.write(' ');
-				for (byte b : hash.getValue()) {
-					outputStream.write(String.format("%02x",b).getBytes());
+		if (Activator.getPlugin().getPreferenceStore().getBoolean(PREF_GENERATE_HASH)) {
+			SortedMap<IPath, byte[]> map = this.contentHashDigest.apply(ResourcesPlugin.getWorkspace());
+			File hashOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-hash.txt");
+			try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
+				for (Entry<IPath, byte[]> hash : map.entrySet()) {
+					outputStream.write(hash.getKey().toString().getBytes());
+					outputStream.write(' ');
+					for (byte b : hash.getValue()) {
+						outputStream.write(String.format("%02x",b).getBytes());
+					}
+					outputStream.write('\n');
 				}
-				outputStream.write('\n');
+				Display.getDefault().asyncExec(() -> {
+					try {
+						IDE.openEditorOnFileStore(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), EFS.getStore(hashOutput.toURI()));
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				});
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-			Display.getDefault().asyncExec(() -> {
-				try {
-					IDE.openEditorOnFileStore(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), EFS.getStore(hashOutput.toURI()));
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			});
-		} catch (Exception e) {
-			e.printStackTrace();
+
+			// problems
+			File problemsOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-problems.txt");
+			try (OutputStream outputStream = new FileOutputStream(problemsOutput)) {
+				Arrays
+				.stream(ResourcesPlugin.getWorkspace().getRoot().findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE))
+				.sorted(Comparator.comparing(marker -> marker.getResource().getLocation().toString()))
+				.forEach(marker -> {
+					try {
+						outputStream.write(marker.getResource().getLocation().toString().getBytes());
+						outputStream.write(' ');
+						outputStream.write(marker.getAttributes().entrySet().stream().sorted(Comparator.comparing(entry -> entry.getKey())).map(entry -> entry.getKey() + "=" + entry.getValue()).collect(Collectors.joining(",")).getBytes());
+						outputStream.write('\n');
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				});
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -336,4 +364,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			}
 		}
 	};
+
+	public static final String PREF_GENERATE_GANTT = "generateGantt";
+	public static final String PREF_GENERATE_HASH = "generateHash";
 }

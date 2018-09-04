@@ -20,6 +20,8 @@ import org.eclipse.core.runtime.jobs.ISchedulingRule;
 
 public class GenerateDependencyGraph {
 
+	public static final String PREF_ID = "generateDependencyGraph";
+
 	public static File getPngGraphDependency() {
 		StringBuilder dotGraph = new StringBuilder();
 		dotGraph.append("digraph dependencyGraph {\n");

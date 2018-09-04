@@ -13,8 +13,14 @@ public class Activator extends AbstractUIPlugin {
 	}
 
 	private IWorkspace workspace;
+	private static Activator INSTANCE;
+
+	public static Activator getPlugin() {
+		return INSTANCE;
+	}
 
 	@Override public void start(BundleContext context) throws Exception {
+		INSTANCE = this;
 		super.start(context);
 		workspace = ResourcesPlugin.getWorkspace();
 		workspace.addResourceChangeListener(LogBuildsListener.SINGLETON, IResourceChangeEvent.PRE_BUILD | IResourceChangeEvent.POST_BUILD);

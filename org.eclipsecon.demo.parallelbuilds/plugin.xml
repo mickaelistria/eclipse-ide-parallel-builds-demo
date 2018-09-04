@@ -18,5 +18,13 @@
             class="org.eclipsecon.demo.parallelbuilds.ForceInitiatlize">
       </startup>
    </extension>
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            class="org.eclipsecon.demo.parallelbuilds.ParallelBuildTestPage"
+            id="org.eclipsecon.demo.parallelbuilds.page1"
+            name="Test and demo Parallel Builds">
+      </page>
+   </extension>
 
 </plugin>
