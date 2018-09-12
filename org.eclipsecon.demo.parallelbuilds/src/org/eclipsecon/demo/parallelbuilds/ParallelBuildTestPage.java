@@ -29,7 +29,7 @@ public class ParallelBuildTestPage extends FieldEditorPreferencePage implements 
 				}
 			}
 		};
-		jdtPref.setPreferenceStore(getPreferenceStore());
+		jdtPref.setPreferenceStore(new ScopedPreferenceStore(InstanceScope.INSTANCE, "org.eclipse.jdt.core"));
 		addField(jdtPref);
 
 		BooleanFieldEditor m2ePref = new BooleanFieldEditor("builderUsesNullSchedulingRule", "M2E null scehduling rule", getFieldEditorParent()) {
