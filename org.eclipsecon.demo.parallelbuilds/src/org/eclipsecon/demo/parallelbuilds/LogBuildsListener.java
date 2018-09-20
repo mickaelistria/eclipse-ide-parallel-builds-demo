@@ -84,6 +84,8 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	private Map<IProject, Long> builderStartTimes;
 	private Map<IProject, Long> builderEndTimes;
 
+	private File directory;
+
 	private LogBuildsListener() {
 	}
 
@@ -99,8 +101,10 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	private void workspaceBuildStart() {
+		originTime = System.currentTimeMillis();
+		this.directory = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), Long.toString(originTime));
 		if (Activator.getPlugin().getPreferenceStore().getBoolean(GenerateDependencyGraph.PREF_ID)) {
-			File pngGraphDependency = GenerateDependencyGraph.getPngGraphDependency();
+			File pngGraphDependency = GenerateDependencyGraph.buildPngDependencyGraph(this.directory);
 			Display.getDefault().asyncExec(() -> {
 				try {
 					IWebBrowser browser = PlatformUI.getWorkbench().getBrowserSupport().createBrowser(IWorkbenchBrowserSupport.NAVIGATION_BAR | IWorkbenchBrowserSupport.AS_EDITOR | IWorkbenchBrowserSupport.LOCATION_BAR, pngGraphDependency.getName(), pngGraphDependency.getName(), pngGraphDependency.getName());
@@ -111,7 +115,6 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			});
 		}
 
-		originTime = System.currentTimeMillis();
 		allProjects = Arrays.asList(ResourcesPlugin.getWorkspace().getRoot().getProjects());
 		builderStartTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
 		builderEndTimes = Collections.synchronizedMap(new HashMap<>(allProjects.size()));
@@ -176,7 +179,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			for (Entry<IProject, Long> entry : jobScheduledTimes.entrySet()) {
 				drawScheduled(entry.getKey(), entry.getValue());
 			}
-			File targetFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-gantt.png");
+			File targetFile = new File(this.directory, originTime + "-gantt.png");
 			try (OutputStream output = new FileOutputStream(targetFile)) {
 				ImageIO.write(bImg, "png", output);
 				cg.dispose();
@@ -195,7 +198,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 
 		if (Activator.getPlugin().getPreferenceStore().getBoolean(PREF_GENERATE_HASH)) {
 			SortedMap<IPath, byte[]> map = this.contentHashDigest.apply(ResourcesPlugin.getWorkspace());
-			File hashOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-hash.txt");
+			File hashOutput = new File(this.directory, originTime + "-hash.txt");
 			try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
 				for (Entry<IPath, byte[]> hash : map.entrySet()) {
 					outputStream.write(hash.getKey().toString().getBytes());
@@ -217,7 +220,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 			}
 
 			// problems
-			File problemsOutput = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), originTime + "-problems.txt");
+			File problemsOutput = new File(this.directory, originTime + "-problems.txt");
 			try (OutputStream outputStream = new FileOutputStream(problemsOutput)) {
 				Arrays
 				.stream(ResourcesPlugin.getWorkspace().getRoot().findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE))

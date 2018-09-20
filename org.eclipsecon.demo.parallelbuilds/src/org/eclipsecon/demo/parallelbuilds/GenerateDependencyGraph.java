@@ -22,7 +22,12 @@ public class GenerateDependencyGraph {
 
 	public static final String PREF_ID = "generateDependencyGraph";
 
-	public static File getPngGraphDependency() {
+	public static File buildPngDependencyGraph(File parentDirectory) {
+		if (!parentDirectory.exists()) {
+			parentDirectory.mkdirs();
+		} else if (!parentDirectory.isDirectory()) {
+			throw new IllegalArgumentException("expected a directory");
+		}
 		StringBuilder dotGraph = new StringBuilder();
 		dotGraph.append("digraph dependencyGraph {\n");
 		dotGraph.append("rankdir=RL;");
@@ -98,7 +103,7 @@ public class GenerateDependencyGraph {
 		dotGraph.append("}");
 
 
-		File dotFile = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), "graph" + System.currentTimeMillis() + ".dot");
+		File dotFile = new File(parentDirectory, "graph" + System.currentTimeMillis() + ".dot");
 		try (FileOutputStream outputStream = new FileOutputStream(dotFile)) {
 			outputStream.write(dotGraph.toString().getBytes(), 0, dotGraph.length());
 			File pngFile = new File(dotFile.getParentFile(), dotFile.getName() + ".png");
