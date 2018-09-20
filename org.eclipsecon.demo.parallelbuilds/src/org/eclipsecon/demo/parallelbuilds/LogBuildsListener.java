@@ -103,6 +103,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	private void workspaceBuildStart() {
 		originTime = System.currentTimeMillis();
 		this.directory = new File(ResourcesPlugin.getWorkspace().getRoot().getLocation().toFile(), Long.toString(originTime));
+		this.directory.mkdirs();
 		if (Activator.getPlugin().getPreferenceStore().getBoolean(GenerateDependencyGraph.PREF_ID)) {
 			File pngGraphDependency = GenerateDependencyGraph.buildPngDependencyGraph(this.directory);
 			Display.getDefault().asyncExec(() -> {
