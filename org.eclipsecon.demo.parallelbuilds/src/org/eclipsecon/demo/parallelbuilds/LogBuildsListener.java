@@ -142,7 +142,9 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 	}
 
 	public void postBuild(IProject project) {
-		builderEndTimes.put(project, System.currentTimeMillis());
+		if (builderEndTimes != null) {
+			builderEndTimes.put(project, System.currentTimeMillis());
+		}
 	}
 
 	private void createImageAndDrawCaption() {
