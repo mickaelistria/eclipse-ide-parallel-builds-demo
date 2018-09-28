@@ -26,5 +26,13 @@
             name="Test and demo Parallel Builds">
       </page>
    </extension>
+   <extension
+         point="org.eclipse.ui.exportWizards">
+      <wizard
+            class="org.eclipsecon.demo.parallelbuilds.ExportWorkspaceSignatureWizard"
+            id="org.eclipsecon.demo.parallelbuilds.generateWorkspaceContentSignature"
+            name="🖋️ Generate workspace content signatures">
+      </wizard>
+   </extension>
 
 </plugin>

@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2018 Red Hat Inc. and others.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v. 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ *  Mickael Istria (Red Hat Inc.) - Initial implementation
+ *******************************************************************************/
 package org.eclipsecon.demo.parallelbuilds;
 
 import java.awt.Color;
@@ -198,47 +210,49 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		}
 
 		if (Activator.getPlugin().getPreferenceStore().getBoolean(PREF_GENERATE_HASH)) {
-			SortedMap<IPath, byte[]> map = this.contentHashDigest.apply(ResourcesPlugin.getWorkspace());
-			File hashOutput = new File(this.directory, originTime + "-hash.txt");
-			try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
-				for (Entry<IPath, byte[]> hash : map.entrySet()) {
-					outputStream.write(hash.getKey().toString().getBytes());
-					outputStream.write(' ');
-					for (byte b : hash.getValue()) {
-						outputStream.write(String.format("%02x",b).getBytes());
-					}
-					outputStream.write('\n');
-				}
-				Display.getDefault().asyncExec(() -> {
-					try {
-						IDE.openEditorOnFileStore(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), EFS.getStore(hashOutput.toURI()));
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				});
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
+			generateWorkspaceContentSignature(new File(this.directory, originTime + "-hash.txt"), new File(this.directory, originTime + "-problems.txt"));
+		}
+	}
 
-			// problems
-			File problemsOutput = new File(this.directory, originTime + "-problems.txt");
-			try (OutputStream outputStream = new FileOutputStream(problemsOutput)) {
-				Arrays
-				.stream(ResourcesPlugin.getWorkspace().getRoot().findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE))
-				.sorted(Comparator.comparing(marker -> marker.getResource().getLocation().toString()))
-				.forEach(marker -> {
-					try {
-						outputStream.write(marker.getResource().getLocation().toString().getBytes());
-						outputStream.write(' ');
-						outputStream.write(marker.getAttributes().entrySet().stream().sorted(Comparator.comparing(entry -> entry.getKey())).map(entry -> entry.getKey() + "=" + entry.getValue()).collect(Collectors.joining(",")).getBytes());
-						outputStream.write('\n');
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				});
-			} catch (Exception e) {
-				e.printStackTrace();
+	protected static void generateWorkspaceContentSignature(File hashOutput, File problemsOutput) {
+		SortedMap<IPath, byte[]> map = contentHashDigest.apply(ResourcesPlugin.getWorkspace());
+		try (OutputStream outputStream = new FileOutputStream(hashOutput)) {
+			for (Entry<IPath, byte[]> hash : map.entrySet()) {
+				outputStream.write(hash.getKey().toString().getBytes());
+				outputStream.write(' ');
+				for (byte b : hash.getValue()) {
+					outputStream.write(String.format("%02x",b).getBytes());
+				}
+				outputStream.write('\n');
 			}
+			Display.getDefault().asyncExec(() -> {
+				try {
+					IDE.openEditorOnFileStore(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), EFS.getStore(hashOutput.toURI()));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		// problems
+		try (OutputStream outputStream = new FileOutputStream(problemsOutput)) {
+			Arrays
+			.stream(ResourcesPlugin.getWorkspace().getRoot().findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE))
+			.sorted(Comparator.comparing(marker -> marker.getResource().getLocation().toString()))
+			.forEach(marker -> {
+				try {
+					outputStream.write(marker.getResource().getLocation().toString().getBytes());
+					outputStream.write(' ');
+					outputStream.write(marker.getAttributes().entrySet().stream().sorted(Comparator.comparing(entry -> entry.getKey())).map(entry -> entry.getKey() + "=" + entry.getValue()).collect(Collectors.joining(",")).getBytes());
+					outputStream.write('\n');
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
