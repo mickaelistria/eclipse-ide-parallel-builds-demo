@@ -59,7 +59,7 @@ public class ParallelBuildTestPage extends FieldEditorPreferencePage implements 
 		BooleanFieldEditor generateGraphPref = new BooleanFieldEditor(GenerateDependencyGraph.PREF_ID, "Generate dependency graph before build", fieldEditorParent);
 		addField(generateGraphPref);
 
-		BooleanFieldEditor generateGantt = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_GANTT, "Generate Gantt chart (requies JDT probes)", getFieldEditorParent());
+		BooleanFieldEditor generateGantt = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_GANTT, "Generate Gantt chart (shows scheduling infor and JDT build duration)", getFieldEditorParent());
 		addField(generateGantt);
 
 		BooleanFieldEditor generateHash = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_HASH, "Generate report with signature for all workspace files", getFieldEditorParent());

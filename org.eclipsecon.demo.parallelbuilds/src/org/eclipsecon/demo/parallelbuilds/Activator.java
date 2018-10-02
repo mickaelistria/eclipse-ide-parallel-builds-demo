@@ -44,6 +44,7 @@ public class Activator extends AbstractUIPlugin {
 		Job.getJobManager().addJobChangeListener(LogBuildsListener.SINGLETON);
 		// enable tracking JDT Builder execution
 		DebugOptions options = context.getService(context.getServiceReference(DebugOptions.class));
+		options.setDebugEnabled(true);
 		options.setOption("org.eclipse.jdt.core/debug", Boolean.toString(true));
 		options.setOption("org.eclipse.jdt.core/debug/builder", Boolean.toString(true));
 		System.setOut(new PrintStream(System.out) {
