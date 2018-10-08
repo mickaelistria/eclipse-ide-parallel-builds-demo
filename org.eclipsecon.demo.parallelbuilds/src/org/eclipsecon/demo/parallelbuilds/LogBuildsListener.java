@@ -74,7 +74,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 
 	private static final int LINE_HEIGHT = 40;
 	private static final float RATIO = (float)0.1; // 1 pixel == 10ms;
-	private static final int PROJECT_NAME_COLUMN_WIDTH = 40;
+	private static int PROJECT_NAME_COLUMN_WIDTH = 40;
 
 	private static final Color[] COLORS = new Color[] {
 		Color.BLUE,
@@ -175,6 +175,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		allProjects.forEach(p -> {
 			cg.setColor(colorForProject(p));
 			cg.drawString(p.getName(), 2, yForProject(p) + 15);
+			PROJECT_NAME_COLUMN_WIDTH = Math.max(PROJECT_NAME_COLUMN_WIDTH, cg.getFontMetrics().stringWidth(p.getName()) + 5);
 		});
 	}
 
