@@ -44,7 +44,7 @@ public class ParallelBuildTestPage extends FieldEditorPreferencePage implements 
 		jdtPref.setPreferenceStore(new ScopedPreferenceStore(InstanceScope.INSTANCE, "org.eclipse.jdt.core"));
 		addField(jdtPref);
 
-		BooleanFieldEditor m2ePref = new BooleanFieldEditor("builderUsesNullSchedulingRule", "M2E null scehduling rule", getFieldEditorParent()) {
+		BooleanFieldEditor m2ePref = new BooleanFieldEditor("builderUsesNullSchedulingRule", "M2E null scheduling rule", getFieldEditorParent()) {
 			@Override public void setPreferenceStore(IPreferenceStore store) {
 				if (getPreferenceStore() == null || store == null) {
 					super.setPreferenceStore(store);
@@ -55,11 +55,11 @@ public class ParallelBuildTestPage extends FieldEditorPreferencePage implements 
 		addField(m2ePref);
 
 		Composite fieldEditorParent = getFieldEditorParent();
-		GridDataFactory.fillDefaults().indent(SWT.DEFAULT, 80).applyTo(fieldEditorParent);
+		GridDataFactory.fillDefaults().indent(0, 80).applyTo(fieldEditorParent);
 		BooleanFieldEditor generateGraphPref = new BooleanFieldEditor(GenerateDependencyGraph.PREF_ID, "Generate dependency graph before build", fieldEditorParent);
 		addField(generateGraphPref);
 
-		BooleanFieldEditor generateGantt = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_GANTT, "Generate Gantt chart (shows scheduling infor and JDT build duration)", getFieldEditorParent());
+		BooleanFieldEditor generateGantt = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_GANTT, "Generate Gantt chart (shows scheduling info and JDT build duration)", getFieldEditorParent());
 		addField(generateGantt);
 
 		BooleanFieldEditor generateHash = new BooleanFieldEditor(LogBuildsListener.PREF_GENERATE_HASH, "Generate report with signature for all workspace files", getFieldEditorParent());

@@ -171,7 +171,7 @@ public class LogBuildsListener extends JobChangeAdapter implements IResourceChan
 		y += LINE_HEIGHT;
 		cg.drawLine(5, y, 105, y);
 		cg.drawString("100px = " + 100/RATIO + "ms", 110, y);
-		// project name colum
+		// project name column
 		allProjects.forEach(p -> {
 			cg.setColor(colorForProject(p));
 			cg.drawString(p.getName(), 2, yForProject(p) + 15);
